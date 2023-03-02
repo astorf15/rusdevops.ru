@@ -1,0 +1,138 @@
+---
+- name: Install LEMP Packages
+  ansible.builtin.apt: 
+    name: "{{ lemp_pkg }}"
+    state: present
+    update_cache: true
+  notify: reload nginx
+
+- name: Install PHP Modules
+  ansible.builtin.apt: 
+    name: "{{ php_modules }}" 
+    state: present
+     
+- name: Install Certbot
+  import_tasks: certbot-install-snap.yml
+
+# Let's Encrypt Configuration
+- name: Check certificate already exists.
+  stat:
+    path: /etc/letsencrypt/live/{{ http_domain | first | replace('*.', '') }}/cert.pem
+  register: letsencrypt_cert
+
+- name: Request certs
+  shell: 
+    cmd: certbot certonly -m {{ certbot_admin_email }} -d {{ http_domain }} -d {{ http_domain_www }} --nginx --agree-tos --no-eff-email --hsts --rsa-key-size 4096 --cert-name={{ http_domain }} --test-cert 
+  when: not letsencrypt_cert.stat.exists
+
+# Nginx Configuration
+- name: Sets nginx conf file
+  template:
+    src: "nginx.conf.j2"
+    dest: "/etc/nginx/nginx.conf"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Sets site conf file
+  template:
+    src: "rusdevops.conf.j2"
+    dest: "/etc/nginx/conf.d/{{ http_conf }}"
+    owner: root
+    group: root
+    mode: 0644
+ 
+- name: Sets gzip conf file
+  template:
+    src: "gzip.conf.j2"
+    dest: "/etc/nginx/conf.d/gzip.conf"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Removes "default" site
+  file:
+    path: "/etc/nginx/sites-enabled/default"
+    state: absent
+  # notify: reload nginx
+
+- name: Copy config files
+  copy: 
+    src: ./files/
+    dest: /etc/nginx/ 
+    mode: 0644
+  notify: restart nginx    
+
+# MySQL Configuration
+- name: Set the root password
+  mysql_user:
+    name: root
+    password: "{{ mysql_root_password }}"
+    login_unix_socket: "/var/run/mysqld/mysqld.sock"
+    check_implicit_admin: yes
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    state: present
+
+- name: Remove all anonymous user accounts
+  mysql_user:
+    name: ''
+    state: absent
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Remove the MySQL test database
+  mysql_db:
+    name: test
+    state: absent
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Creates database for WordPress
+  mysql_db:
+    name: "{{ mysql_db }}"
+    state: present
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Create MySQL user for WordPress
+  mysql_user:
+    name: "{{ mysql_user }}"
+    password: "{{ mysql_password }}"
+    priv: "{{ mysql_db }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+  
+# WordPress Configuration
+- name: Creates directory
+  file:
+    path: /var/www/{{ http_domain }}
+    state: directory
+    mode: 0640
+
+- name: Download and unpack latest WordPress
+  unarchive:
+    src: https://wordpress.org/latest.tar.gz
+    dest: "/var/www/{{ http_domain }}"
+    remote_src: yes
+    creates: "/var/www/{{ http_domain }}/wordpress"
+  
+- name: Set ownership
+  file:
+    path: "/var/www/{{ http_domain }}"
+    state: directory
+    recurse: yes
+    owner: www-data
+    group: www-data
+    mode: u=rwX,g=rX,o=-rwX
+ 
+- name: Set up wp-config
+  template:
+    src: "wp-config.php.j2"
+    dest: "/var/www/{{ http_domain }}/wordpress/wp-config.php"
+    mode: 0600
+    owner: www-data
+    group: www-data 
+- import_tasks: renew-cron.yml  
+

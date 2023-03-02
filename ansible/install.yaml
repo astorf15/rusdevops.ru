@@ -1,0 +1,48 @@
+---
+- name: Configure server
+  hosts: all
+  become: true
+  remote_user: astorf
+  roles:
+    - set-hostname
+    - set-time-zone
+  tags:
+    - config-server
+
+- name: Docker install + Node Exporter
+  hosts: rusdevops
+  become: true
+  remote_user: astorf
+  roles:
+    - install-docker 
+    - install-node-exporter
+  tags:
+    - install-docker  
+
+- name: Install WEMP
+  hosts: rusdevops
+  become: true
+  remote_user: astorf
+  roles:
+    - install-wemp
+  tags:
+    - install-wemp
+
+- name: Monitoring
+  hosts: monitoring
+  become: true
+  remote_user: astorf
+  roles:
+    - install-docker 
+    - install-monitoring
+  tags:
+    - install-monitoring     
+
+- name: Set Iptables rules
+  hosts: rusdevops
+  become: true
+  remote_user: astorf
+  roles:
+    - iptables-rules
+  tags:
+    - iptables-rules    

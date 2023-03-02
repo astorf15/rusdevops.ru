@@ -1,0 +1,15 @@
+scrape_configs:
+  - job_name: Exporters
+    scrape_interval: 5s
+    static_configs:
+    - targets: ['10.4.1.32:9100']
+
+rule_files:
+  - 'alert.rules'
+
+alerting:
+  alertmanagers:
+  - scheme: http
+    static_configs:
+    - targets:
+      - "10.4.1.32:9093"

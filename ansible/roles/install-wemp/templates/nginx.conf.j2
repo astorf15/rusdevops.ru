@@ -1,0 +1,68 @@
+# Пользователь и группа, от имени которых будет запущен процесс
+user  www-data;
+
+error_log  /var/log/nginx/error.log warn;
+pid        /run/nginx.pid;
+# Максимальное количество соединений одного воркера
+    worker_processes  auto;
+    worker_rlimit_nofile 20960;
+events {
+
+# Максимальное количество соединений одного воркера
+    worker_connections  1024;
+
+# Принимать множественные соединения в очереди одновременно
+    multi_accept        on;
+# Принимать новые соединения один за другим
+    accept_mutex        on;
+# Определяет время ожидания воркера перед принятием нового подключения
+    accept_mutex_delay  500ms;
+# Метод обработки подключения от клиента
+    use                 epoll;
+# Количество событий, которые Nginx передаст ядру
+    epoll_events        512;
+}
+
+http {
+
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+# Отключить вывод версии nginx в ответе
+    server_tokens off;
+    server_names_hash_bucket_size 64;
+# Метод отправки данных sendfile эффективнее чем read+write
+    sendfile                        on;
+# Ограничивает объём данных, который может передан за один вызов sendfile(). Нужно для исключения сит>    
+    sendfile_max_chunk  128k;
+# Отправлять заголовки и и начало файла в одном пакете
+    tcp_nopush                      on;
+    tcp_nodelay                     on;
+
+# Сбрасывать соединение если клиент перестал читать ответ
+    reset_timedout_connection       on;
+# Разрывать соединение по истечению таймаута при получении заголовка и тела запроса
+    client_header_timeout           3;
+    client_body_timeout             5;
+# Разрывать соединение, если клиент не отвечает в течение 3 секунд
+    send_timeout                    3;
+
+# Задание буфера для заголовка и тела запроса
+    client_header_buffer_size       2k;
+    client_body_buffer_size         256k;
+# Ограничение на размер тела запроса
+    client_max_body_size            100m;
+
+    log_format main     '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log  /var/log/nginx/access.log main buffer=16k flush=2m;
+
+    keepalive_timeout  75;
+    keepalive_requests 600;
+
+    include /etc/nginx/conf.d/*.conf;
+  # include /etc/nginx/sites-enabled/*;
+
+    }
+
+    
